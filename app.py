@@ -16,19 +16,14 @@ st.set_page_config(
     layout="wide"
 )
 
-# Define functions for the app
-def get_top_stocks():
-    """Get the top 25 stocks based on total return"""
-    data = {
-        "total_trades": [196, 20, 26, 19, 34, 15, 30, 30, 13, 16, 18, 9, 32, 17, 12, 10, 8, 13, 10, 17, 16, 28, 19, 34, 12],
-        "win_rate": [68.88, 65, 73.08, 84.21, 55.88, 100, 90, 80, 76.92, 81.25, 94.44, 66.67, 59.38, 52.94, 75, 80, 87.5, 61.54, 80, 64.71, 75, 75, 84.21, 70.59, 75],
-        "total_return": [21979.47, 329.77, 242.99, 241.26, 208.82, 185, 155.4, 149.16, 105.53, 101.01, 96.35, 87.75, 76.14, 75.85, 70.77, 57.4, 53.5, 52.08, 50.09, 48.3, 43.84, 41.09, 36.42, 31.48, 28.66],
-        "max_drawdown": [34331.97, 13.6, 23.6, 5.9, 301.77, 0, 7.74, 20.23, 1.76, 0.6, 17.38, 16.05, 101.59, 22.13, 32.19, 17.71, 0, 18.84, 2.07, 20.56, 35.84, 9.35, 20.14, 10.73, 3.03],
-        "avg_profit_per_trade": [3.8, 8.49, 5.31, 7.37, 4.45, 7.68, 3.4, 3.35, 6.2, 4.86, 4.15, 8.21, 2.09, 3.81, 5.76, 5.07, 6.13, 3.62, 4.43, 2.76, 2.69, 1.33, 1.79, 0.93, 2.28],
-        "stock": ["IDBI-EQ", "HDFCLIFE-EQ", "TITAN-EQ", "ADANIENT-EQ", "HEROMOTOCO-EQ", "LT-EQ", "TCS-EQ", "WIPRO-EQ", "BPCL-EQ", "KOTAKBANK-EQ", "EICHERMOT-EQ", "TATASTEEL-EQ", "BAJFINANCE-EQ", "CANBK-EQ", "SUNPHARMA-EQ", "APOLLOHOSP-EQ", "DIVISLAB-EQ", "INDUSINDBK-EQ", "ICICIBANK-EQ", "SBIN-EQ", "TECHM-EQ", "NIFTY50-INDEX", "FINNIFTY-INDEX", "HDFCBANK-EQ", "CIPLA-EQ"]
-    }
-    
-    return pd.DataFrame(data)
+# Define list of stocks to analyze
+def get_stock_list():
+    """Get the list of stocks to analyze"""
+    # Just return the list of stocks
+    return ["IDBI-EQ", "HDFCLIFE-EQ", "TITAN-EQ", "ADANIENT-EQ", "HEROMOTOCO-EQ", "LT-EQ", "TCS-EQ", "WIPRO-EQ", 
+            "BPCL-EQ", "KOTAKBANK-EQ", "EICHERMOT-EQ", "TATASTEEL-EQ", "BAJFINANCE-EQ", "CANBK-EQ", "SUNPHARMA-EQ", 
+            "APOLLOHOSP-EQ", "DIVISLAB-EQ", "INDUSINDBK-EQ", "ICICIBANK-EQ", "SBIN-EQ", "TECHM-EQ", "NIFTY50-INDEX", 
+            "FINNIFTY-INDEX", "HDFCBANK-EQ", "CIPLA-EQ"]
 
 def format_symbol(symbol):
     """Convert the stock symbol to Yahoo Finance format"""
@@ -381,6 +376,47 @@ def plot_heikin_ashi_chart(df, symbol):
     
     return fig
 
+# Function to scan all stocks for entry signals
+def scan_stocks_for_signals(stocks_list):
+    """Scan all stocks to find those with active entry signals"""
+    signal_stocks = []
+    
+    with st.spinner("Scanning stocks for trading signals..."):
+        for stock in stocks_list:
+            # Get stock data
+            stock_data = fetch_stock_data(stock, period="1d", interval="15m")
+            
+            # Calculate indicators
+            ha_data = calculate_heikin_ashi(stock_data)
+            ha_data = calculate_stochastic_rsi(ha_data)
+            ha_data = check_entry_exit_signals(ha_data)
+            
+            # Get current signals
+            signals = get_current_signals(ha_data)
+            
+            # Check for active or potential signals
+            signal_type = None
+            if signals['long_entry']:
+                signal_type = "🟢 LONG ENTRY"
+            elif signals['short_entry']:
+                signal_type = "🔴 SHORT ENTRY"
+            elif signals['potential_long_entry']:
+                signal_type = "⏳ Potential LONG ENTRY"
+            elif signals['potential_short_entry']:
+                signal_type = "⏳ Potential SHORT ENTRY"
+            
+            # If there's a signal, add to the list
+            if signal_type:
+                signal_stocks.append({
+                    'stock': stock,
+                    'signal': signal_type,
+                    'last_price': f"₹{ha_data['Close'].iloc[-1]:.2f}",
+                    'stoch_rsi_k': f"{signals['stoch_rsi_k']:.2f}",
+                    'candle_color': signals['latest_candle_color']
+                })
+    
+    return signal_stocks
+
 # Define the app layout
 def main():
     # App title and description
@@ -388,7 +424,7 @@ def main():
     
     st.markdown("""
     This app analyzes stocks using the Heikin Ashi trading strategy with Stochastic RSI indicators.
-    Select from the top 25 performing stocks and get trading signals based on the latest data.
+    Select from the available stocks and get trading signals based on the latest data.
     """)
     
     # Sidebar for strategy information
@@ -420,24 +456,32 @@ def main():
         with st.expander("Short Exit Conditions"):
             st.write("Exit when 2 consecutive green candles form and Stochastic RSI is less than 20.")
     
-    # Load top stocks data
-    top_stocks_df = get_top_stocks()
+    # Load stock list
+    all_stocks = get_stock_list()
     
-    # Display top stocks table
-    st.header("Top 25 Performing Stocks")
+    # Scan all stocks for trading signals
+    st.header("Stocks with Entry Signals")
     
-    # Format the table for better display
-    display_df = top_stocks_df.copy()
-    display_df['win_rate'] = display_df['win_rate'].apply(lambda x: f"{x:.2f}%")
-    display_df['total_return'] = display_df['total_return'].apply(lambda x: f"{x:.2f}")
-    display_df['max_drawdown'] = display_df['max_drawdown'].apply(lambda x: f"{x:.2f}")
-    display_df['avg_profit_per_trade'] = display_df['avg_profit_per_trade'].apply(lambda x: f"{x:.2f}")
+    # Button to refresh signals
+    if st.button("Scan for New Signals"):
+        st.session_state.signal_stocks = scan_stocks_for_signals(all_stocks)
     
-    st.dataframe(display_df, use_container_width=True)
+    # Initialize signal_stocks in session state if not already done
+    if 'signal_stocks' not in st.session_state:
+        st.session_state.signal_stocks = scan_stocks_for_signals(all_stocks)
     
-    # Stock selection
-    st.header("Select Stock for Analysis")
-    selected_stock = st.selectbox("Choose a stock", top_stocks_df['stock'].tolist())
+    # Display stocks with signals
+    if st.session_state.signal_stocks:
+        signal_df = pd.DataFrame(st.session_state.signal_stocks)
+        st.dataframe(signal_df, use_container_width=True)
+        
+        # Allow selecting from stocks with signals
+        signal_stocks_only = [item['stock'] for item in st.session_state.signal_stocks]
+        selected_stock = st.selectbox("Select a stock with signals to view details", signal_stocks_only)
+    else:
+        st.info("No stocks currently have entry signals. Try again later or adjust the strategy parameters.")
+        # If no signal stocks, select from all stocks
+        selected_stock = st.selectbox("Select any stock to analyze", all_stocks)
     
     # Timeframe selection
     time_options = {
@@ -581,25 +625,19 @@ def main():
     else:
         st.write("No signals in the recent data period.")
     
-    # Additional performance metrics
-    st.header("Performance Metrics")
+    # Additional performance metrics (without using top_stocks_df)
+    st.header("Stock Information")
     
-    # Get stock info from the top_stocks_df
-    stock_info = top_stocks_df[top_stocks_df['stock'] == selected_stock].iloc[0]
-    
-    col1, col2, col3, col4 = st.columns(4)
+    # Create columns for display
+    col1, col2 = st.columns(2)
     
     with col1:
-        st.metric("Total Trades", int(stock_info['total_trades']))
-    
+        st.metric("Last Close Price", f"₹ {ha_data['Close'].iloc[-1]:.2f}")
+        
     with col2:
-        st.metric("Win Rate", f"{stock_info['win_rate']:.2f}%")
-    
-    with col3:
-        st.metric("Total Return", f"₹{stock_info['total_return']:.2f}")
-    
-    with col4:
-        st.metric("Avg Profit/Trade", f"₹{stock_info['avg_profit_per_trade']:.2f}")
+        # Calculate some metrics from the data we have
+        returns = ha_data['Close'].pct_change().dropna()
+        st.metric("Volatility (15-day)", f"{returns.std() * 100:.2f}%")
     
     # Disclaimer
     st.divider()
